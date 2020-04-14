@@ -2660,6 +2660,8 @@ void resetServerStats(void) {
     int j;
 
     server.stat_numcommands = 0;
+    server.stat_err_numcommands = 0;
+    server.stat_big_value_numcommands = 0;
     server.stat_numconnections = 0;
     server.stat_expiredkeys = 0;
     server.stat_expired_stale_perc = 0;
@@ -3248,6 +3250,10 @@ void call(client *c, int flags) {
         real_cmd->calls++;
     }
 
+    if (c->bufpos > 32<<10){
+        server.stat_big_value_commands++;
+    }
+
     /* Propagate the command into the AOF and replication link */
     if (flags & CMD_CALL_PROPAGATE &&
         (c->flags & CLIENT_PREVENT_PROP) != CLIENT_PREVENT_PROP)
@@ -3377,12 +3383,14 @@ int processCommand(client *c) {
         addReplyErrorFormat(c,"unknown command `%s`, with args beginning with: %s",
             (char*)c->argv[0]->ptr, args);
         sdsfree(args);
+        server.stat_err_numcommands++;
         return C_OK;
     } else if ((c->cmd->arity > 0 && c->cmd->arity != c->argc) ||
                (c->argc < -c->cmd->arity)) {
         flagTransaction(c);
         addReplyErrorFormat(c,"wrong number of arguments for '%s' command",
             c->cmd->name);
+        server.stat_err_numcommands++;
         return C_OK;
     }
 
